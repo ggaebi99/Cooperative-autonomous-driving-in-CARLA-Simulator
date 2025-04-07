@@ -21,7 +21,7 @@
 
 ---
 
-## 기타 참고사항
+## Additional Notes
 
 - collaborator: [@ggaebi99](https://github.com/ggaebi99), [@crator99](https://github.com/crator99)  
 - technology of use: CARLA Simulator, Socket Communication, Artificial Intelligence, Urban Environmental Awareness, Vision
