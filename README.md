@@ -12,19 +12,19 @@
 
 ---
 
-## 🔧 추후 수정 예정
+## Planned Updates
 
-- MIDI 신호 정확도 기반 판정 로직 개선  
-- 다양한 난이도 지원 (Easy, Normal, Hard)  
-- 악보 자동 생성 기능 추가  
-- 점수 시스템 구현  
+- Refactor folder structure 
+- Optimize code  
+- Improve code comments
+- Add screenshots of the app in action 
 
 ---
 
-## 💬 기타 참고사항
+## 기타 참고사항
 
-- 공동 작업자: [@아이디1](https://github.com/아이디1), [@아이디2](https://github.com/아이디2)  
-- 사용 기술: Java, Android Studio, USB MIDI 통신  
-- 문의: example@email.com
+- collaborator: [@ggaebi99](https://github.com/ggaebi99), [@crator99](https://github.com/crator99)  
+- technology of use: CARLA Simulator, Socket Communication, Artificial Intelligence, Urban Environmental Awareness, Vision
+- inquiry e-mail: ggaebi1999@gmail.com
 
 ---
