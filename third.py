@@ -140,6 +140,11 @@ import socket
 
 ######### 임시 임시 임시
 import cv2
+CORRECTION_VALUE = 50
+
+f = open(f"third_{CORRECTION_VALUE}.txt", 'w')
+
+yaw_f = open("yaw_data.txt", "w")
 
 import json
 import re
@@ -248,16 +253,43 @@ class PlatoonControl(object):
         v = self.player.get_velocity()
         speed = math.sqrt(v.x**2 + v.y**2 + v.z**2)
         self.player.apply_control(self.control)
-        if mode:
-            if math.sqrt((current_x - self.last_send[0]) ** 2 + (current_y - self.last_send[1]) ** 2) > 1:
-                data = self.json_formatting(current_x, current_y, speed, "SEND_DATA", mode)
-                self.server_socket.send(data)
+        if self.last_send != [current_x, current_y, speed]:
+                yaw = self.player.get_transform().rotation.yaw
+                if yaw < 0:
+                    yaw = yaw + 360
+                yaw_check = min(len(self.data_que), self.yaw_check)
+
+                pre_data = []
+                for i in range(yaw_check):
+                    yaw_diff = yaw - (math.atan2(self.data_que[i+1]['Y_OR_STEER'] - self.data_que[i]['Y_OR_STEER'], self.data_que[i+1]['X_OR_THROTTLE'] - self.data_que[i]['X_OR_THROTTLE']) / np.pi * 180)
+                    if yaw_diff > 350:
+                        yaw_diff -= 360
+                    # print(f"y_d : {yaw_diff}")
+                    pre_data.append(abs(yaw_diff))
+
+
+
+                pre_data = np.array(pre_data).reshape(1,5)
+                pre = model.predict(pre_data,verbose = 0)
+                # print(f"{pre} : {pre_data}")                
+                if pre > 0.5:
+                    mode = True
+                else:
+                    mode = False
+
+                if mode:
+                    data = self.json_formatting(current_x, current_y, speed, "SEND_DATA", mode)
+                    self.server_socket.send(data)
+                else:
+                    self.count += 1
+                    data = self.json_formatting(throttle, steer, brake, "SEND_DATA", mode)
+                    if self.count == CORRECTION_VALUE:
+                        mode = "보정값"
+                        self.count = 0
+                        data = self.json_formatting(current_x, current_y, speed, "SEND_DATA", mode)
+                    self.server_socket.send(data)
                 self.last_send = [current_x, current_y, speed]
-        else:
-            if self.last_send != [throttle, steer, brake]:
-                data = self.json_formatting(throttle, steer, brake, "SEND_DATA", mode)
-                self.server_socket.send(data)
-                self.last_send = [throttle, steer, brake]
+
 
     def exec_waypoint_nav_func(self, world, stop):
         control_red = carla.VehicleControl()
@@ -265,9 +297,12 @@ class PlatoonControl(object):
         control_red.throttle = 0
         control_red.brake = 1.0
 
-        yaw_check = 3
+        yaw_check = 5
         mode = False
         count = 0
+        last_text = ""
+        last_yaw_text = ""
+        last_yaw_text_= ""
 
         throttle, steer, brake = 0.1, 0, 0
         new_waypoint_xys = [0,0,0]
@@ -285,7 +320,22 @@ class PlatoonControl(object):
             while True:
                 if stop.is_set():
                     break
-                
+            
+                for i in self.world.world.get_actors().filter('walker.pedestrian.*'):
+                    pedestrian_distance = math.sqrt((current_x - i.get_transform().location.x)**2 + (current_y - i.get_transform().location.y)**2)
+                    v_curr = self.player.get_velocity()
+
+                    v_safety = (3.6 * math.sqrt(v_curr.x**2 + v_curr.y**2 + v_curr.z**2))
+
+                    if v_safety >= 40:
+                        p_dist = 16
+                    else:
+                        p_dist = 6.5
+
+                    while pedestrian_distance <= p_dist:
+                        self.player.apply_control(emergency)
+                        pedestrian_distance = math.sqrt((current_x - i.get_transform().location.x)**2 + (current_y - i.get_transform().location.y)**2)
+
                 if world.camera_manager.state == "red":
                     self.player.apply_control(control_red)
                     if self.front != self.player.id:
@@ -324,10 +374,11 @@ class PlatoonControl(object):
                                         sender_distinct = math.sqrt((current_x - i.get_transform().location.x)**2 + (current_y - i.get_transform().location.y)**2)
 
                                 if sender_distinct > 30:
-                                    # data = self.json_formatting(0, 0, 0, "탈출")
-                                    # self.front = self.player.id
-                                    # self.server_socket.send(data)
-                                    print("탈출")
+                                    data = self.json_formatting(0, 0, 0, "탈출")
+                                    self.front = self.player.id
+                                    self.server_socket.send(data)
+
+                                    break
 
                                 elif sender_distinct > 15:
                                     throttle += 0.25                                                         
@@ -349,27 +400,15 @@ class PlatoonControl(object):
                                     self.front = temp_front
                                     data = self.json_formatting(0, 0, 0, "합류")
                                     self.server_socket.send(data)
-                                    print("합류")
                                     self.data_que = self.queue_init(65536)
+
+                                    break
                             
                             current_x = world.player.get_transform().location.x 
                             current_y = world.player.get_transform().location.y
 
-
-                            yaw = self.player.get_transform().rotation.yaw
-                            if len(self.data_que) > 0:
-                                yaw_check = min(len(self.data_que), yaw_check)
-                                yaw_diff = yaw - (math.atan2(self.data_que[yaw_check-1]['Y_OR_STEER'] - current_y, self.data_que[yaw_check-1]['X_OR_THROTTLE'] - current_x) / np.pi * 180)
-                                if abs(yaw_diff) > 5:
-                                    mode = True
-                                else:
-                                    mode = False
-                                    count += 1
-                                    if count == 50:
-                                        mode = True
-                                        count = 0
+                            
                             self.control_func(throttle, steer, brake, current_x, current_y, mode)
-                        
                         
                     else:
                         throttle = data["X_OR_THROTTLE"]
@@ -385,10 +424,9 @@ class PlatoonControl(object):
                                     sender_distinct = math.sqrt((current_x - i.get_transform().location.x)**2 + (current_y - i.get_transform().location.y)**2)
 
                             if sender_distinct > 30:
-                                # data = self.json_formatting(0, 0, 0, "탈출")
-                                # self.front = self.player.id
-                                # self.server_socket.send(data)
-                                print("탈출")
+                                data = self.json_formatting(0, 0, 0, "탈출")
+                                self.front = self.player.id
+                                self.server_socket.send(data)
 
                             elif sender_distinct > 15:
                                 throttle += 0.25                                                         
@@ -410,13 +448,17 @@ class PlatoonControl(object):
                                 self.front = temp_front
                                 data = self.json_formatting(0, 0, 0, "합류")
                                 self.server_socket.send(data)
-                                print("합류")
                                 self.data_que = self.queue_init(65536)
                         
                         current_x = world.player.get_transform().location.x 
                         current_y = world.player.get_transform().location.y
 
+                        if last_text != f"X : {current_x}, Y : {current_y}\n":
+                            last_text = f"X : {current_x}, Y : {current_y}\n"
+                            f.write(last_text)
+                            f.flush()
                         self.control_func(throttle, steer, brake, current_x, current_y, mode)
+
 
         except:
             self.stop.set()
@@ -581,9 +623,9 @@ class World(object):
                 sys.exit(1)
             spawn_points = self.map.get_spawn_points()
             #spawn_point = random.choice(spawn_points) if spawn_points else carla.Transform()
-            # spawn_point = carla.Transform(carla.Location(x=-31.0, y=-57.7, z=0.600000), carla.Rotation(pitch=0.000000, yaw=0.159198, roll=0.000000))
-            # spawn_point = carla.Transform(carla.Location(x=-46.0, y=-57.7, z=0.600000), carla.Rotation(pitch=0.000000, yaw=0.159198, roll=0.000000))
             spawn_point = carla.Transform(carla.Location(x=-61.0, y=-57.7, z=0.600000), carla.Rotation(pitch=0.000000, yaw=0.159198, roll=0.000000))
+            # spawn_point = carla.Transform(carla.Location(x=-46.0, y=-57.7, z=0.600000), carla.Rotation(pitch=0.000000, yaw=0.159198, roll=0.000000))
+            # spawn_point = carla.Transform(carla.Location(x=-61.0, y=-57.7, z=0.600000), carla.Rotation(pitch=0.000000, yaw=0.159198, roll=0.000000))
             self.player = self.world.try_spawn_actor(blueprint, spawn_point)
             self.modify_vehicle_physics(self.player)
         # Set up the sensors.
@@ -1724,4 +1766,6 @@ def main():
 
 if __name__ == '__main__':
 
-    main()
+    main() 
+
+    f.close()

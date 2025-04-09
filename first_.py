@@ -331,19 +331,19 @@ class PlatoonControl(object):
                 if stop.is_set():
                     break
                 
-                # if world.camera_manager.state == "red":
-                #     self.player.apply_control(control_red)
-                #     if self.front != self.player.id:
-                #         for i in self.world.world.get_actors().filter('vehicle.*'):
-                #             if self.front == i.id:
-                #                 sender_distinct = math.sqrt((current_x - i.get_transform().location.x)**2 + (current_y - i.get_transform().location.y)**2)
+                if world.camera_manager.state == "red":
+                    self.player.apply_control(control_red)
+                    if self.front != self.player.id:
+                        for i in self.world.world.get_actors().filter('vehicle.*'):
+                            if self.front == i.id:
+                                sender_distinct = math.sqrt((current_x - i.get_transform().location.x)**2 + (current_y - i.get_transform().location.y)**2)
 
-                #         if sender_distinct > 30:
-                #             # data = self.json_formatting(0, 0, 0, "탈출")
-                #             # self.front = self.player.id
-                #             # self.server_socket.send(data)
-                #             print("탈출")
-                #     continue
+                        if sender_distinct > 30:
+                            data = self.json_formatting(0, 0, 0, "탈출")
+                            self.front = self.player.id
+                            self.server_socket.send(data)
+                            print("탈출")
+                    continue
 
                 if len(self.data_que) > 0:
                     data = self.data_que.popleft()
